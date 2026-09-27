@@ -1,0 +1,36 @@
+pi-web-search includes code adapted from oh-my-pi:
+https://github.com/can1357/oh-my-pi
+Upstream revision: b1a8b875cf81ec2fdc3cc397a2d4b6a9a777543d
+
+Copyright (c) 2025 Mario Zechner
+Copyright (c) 2025-2026 Can Bölük
+Copyright (c) 2026 Stencil Labs, Inc.
+Licensed under the MIT License; see LICENSE.
+
+Copied/adapted from packages/coding-agent/src/web/search/:
+- query.ts and utils.ts
+- providers/brave.ts, tavily.ts, jina.ts, synthetic.ts, ollama.ts,
+  tinyfish.ts, duckduckgo.ts, utils.ts, kimi.ts, zai.ts,
+  startpage.ts, google.ts, ecosia.ts, mojeek.ts
+- Perplexity consumer SSE parser/transport from providers/perplexity.ts
+- Query tests from packages/coding-agent/test/web/search/query.test.ts
+
+Reimplemented from the same source tree's index.ts, types.ts,
+providers/base.ts, providers/parallel.ts, and providers/exa.ts:
+- Standalone provider contract and Pi tool registration
+- Parallel/Exa REST and public MCP adapters
+- Result formatting and sequential fallback
+
+Local changes replace OMP/Bun APIs with Node fetch, a small injectable
+API-key adapter, bounded transport, TypeBox, and the Pi extension API.
+Additional adapted protocol implementations:
+- providers/anthropic.ts, gemini.ts, codex.ts, xai.ts, openrouter.ts,
+  perplexity-auth.ts, firecrawl.ts, searxng.ts, public.ts
+- packages/coding-agent/src/web/kagi.ts
+- packages/ai/src/registry/oauth/perplexity.ts, google-gemini-cli.ts,
+  google-antigravity.ts, and catalog auth/*.kdl public OAuth client config
+- packages/coding-agent/src/utils/browser-session.ts
+
+The OMP SQLite/model catalog/browser broker runtime is not included.
+OAuth flows are adapted to Pi's provider auth storage and refresh lifecycle.
+See PORTING.md for platform differences and remaining parity gaps.

@@ -1,0 +1,51 @@
+{
+  "name": "pi-web-search",
+  "version": "0.2.0",
+  "description": "Standalone port of oh-my-pi web search for the Pi coding agent",
+  "type": "module",
+  "license": "MIT",
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "web-search"
+  ],
+  "files": [
+    "src",
+    "README.md",
+    "PORTING.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "pi": {
+    "extensions": [
+      "./src/extension.ts"
+    ]
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:live": "tsx scripts/smoke.ts",
+    "prepack": "npm run check && npm test"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*",
+    "@earendil-works/pi-tui": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "^0.87.1",
+    "@earendil-works/pi-tui": "^0.87.1",
+    "@types/node": "^22.19.0",
+    "tsx": "^4.20.0",
+    "typebox": "^1.0.0",
+    "typescript": "^5.9.0",
+    "vitest": "^4.1.11"
+  },
+  "dependencies": {
+    "linkedom": "^0.18.13",
+    "puppeteer-core": "^25.12.0"
+  }
+}
