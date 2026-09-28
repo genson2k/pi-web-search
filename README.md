@@ -1,109 +1,114 @@
 # pi-web-search
 
-Port [oh-my-pi web search](https://github.com/can1357/oh-my-pi) sang **Pi coding agent**, chạy Node.js, không phụ thuộc runtime/database của OMP.
+Web search for the [Pi coding agent](https://pi.dev), ported from the web search in **[oh-my-pi](https://github.com/can1357/oh-my-pi) by Can Bölük**. It runs on Node.js and doesn't need the OMP runtime or database.
 
-- Tool `web_search`, command `/web-search`, config theo user/project.
-- **25 backend ID** của OMP, gồm search APIs, hosted model search, HTML engines và Public Web aggregate.
-- **`/login perplexity`**: browser SSO hoặc email OTP/TOTP; dùng session subscription, không yêu cầu API key riêng.
-- `/login google-gemini-cli`, `/login google-antigravity`; reuse login có sẵn của Pi cho Anthropic/Codex/xAI.
-- Query operators, native filters, sequential fallback, timeout/cancel, bounded JSON/SSE và output truncation.
+- `web_search` tool, `/web-search` status command, user and project config.
+- **All 25 OMP backend IDs**: search APIs, hosted model search, HTML engines and the Public Web aggregate.
+- **`/login perplexity`**: browser SSO or email OTP/TOTP. It uses your Perplexity subscription session, so you don't need a separate API key.
+- `/login google-gemini-cli` and `/login google-antigravity`. Also reuses Pi's existing Anthropic, Codex and xAI logins.
+- Query operators, native filters, sequential fallback, timeouts and cancellation, size-limited JSON/SSE, and output truncation.
+- A custom TUI renderer with a compact summary and an expandable result view.
 
-**Đây là port chức năng trên API Pi, không phải nhúng nguyên OMP.** Tất cả backend đã có implementation và fixture tests; không đồng nghĩa mọi endpoint/account đã được kiểm chứng live. Những khác biệt còn lại được ghi trong [PORTING.md](PORTING.md).
+**This is a functional port built on Pi's extension API, not an embedded copy of OMP.** Every backend has an implementation and fixture tests, but not every endpoint or account type has been checked against the live service. [PORTING.md](PORTING.md) lists the remaining differences.
 
-## Cài đặt
+## Install
 
-Yêu cầu Node.js **22.19+**, Pi `@earendil-works/pi-coding-agent` hiện hành (đã kiểm tra 0.87.1).
+Requires Node.js **22.19+** and a current Pi (`@earendil-works/pi-coding-agent`; tested with 0.87.1).
 
 ```bash
-cd /path/to/pi-web-search
+pi install git:github.com/genson2k/pi-web-search@v0.2.0
+```
+
+Or from a local clone:
+
+```bash
+git clone https://github.com/genson2k/pi-web-search
+cd pi-web-search
 npm ci --ignore-scripts
 
-# Thử một phiên, không thay đổi settings:
+# Try it for one session without changing settings:
 pi -e ./src/extension.ts
 
-# Hoặc cài package local:
-pi install git:github.com/genson2k/pi-web-search@v0.2.0
-
-# Hoặc từ bản clone local:
+# Or install the clone:
 pi install /absolute/path/to/pi-web-search
 ```
 
-Mở lại Pi hoặc `/reload`. Chưa publish package này lên npm; không dùng `pi install npm:pi-web-search` để cài repo này vì tên đó có thể trùng package khác. Pi cũ `@mariozechner/pi-coding-agent` chưa được kiểm tra.
+Restart Pi or run `/reload` afterwards. The package is not on npm, and `npm:pi-web-search` may be an unrelated package. The older `@mariozechner/pi-coding-agent` has not been tested.
 
-## Login Perplexity
+## Perplexity login
 
-Trong Pi đã load extension:
+With the extension loaded:
 
 ```text
 /login perplexity
 ```
 
-1. Chọn phương thức OAuth nếu Pi hỏi.
-2. Nhập `sso` hoặc để trống để mở browser. Muốn OTP, nhập thẳng địa chỉ email (hoặc gõ chữ `email`, rồi nhập địa chỉ ở bước tiếp theo).
-3. Đăng nhập trong cửa sổ Chrome riêng; chọn SSO nếu tài khoản tổ chức yêu cầu.
-4. Extension lấy session cookie của **cửa sổ đó**, xác thực với Perplexity, rồi trả credential cho Pi lưu vào `auth.json`.
-5. Pin provider để tránh fallback sang dịch vụ khác:
+1. If Pi asks for a method, choose OAuth.
+2. Enter `sso` or leave it blank to open a browser. For email OTP, type your email address directly, or type `email` and enter the address at the next prompt.
+3. Sign in in the separate Chrome window. Choose SSO if your organization requires it.
+4. The extension reads the session cookie from **that window only**, validates it with Perplexity, and hands the credential to Pi, which stores it in `auth.json`.
+5. To keep searches on Perplexity instead of falling back to other services, pin the provider:
 
 ```bash
 pi -e ./src/extension.ts --web-search-provider perplexity
 ```
 
-Hoặc gọi tool với `provider: "perplexity"`. `/web-search` hiển thị session/config đã nhận, không hiển thị token. `/logout perplexity` xóa credential lưu trong Pi.
+You can also pass `provider: "perplexity"` to the tool. `/web-search` shows the detected sessions and config but never shows tokens. `/logout perplexity` removes the stored credential.
 
-### Browser / headless
+### Browser and headless use
 
-- Cần Chrome/Chromium cài sẵn. Tự tìm đường dẫn thông thường trên macOS/Linux/Windows.
-- Đường dẫn khác: `PI_WEB_SEARCH_BROWSER_PATH=/path/to/chrome` (hoặc `PUPPETEER_EXECUTABLE_PATH`).
-- Profile tạm độc lập, không dùng profile browser thường, không đọc Keychain/macOS app của bạn.
-- Sandbox và TLS checks giữ nguyên. Không tải browser tự động.
-- Login timeout 5 phút. Đóng cửa sổ hoặc cancel trong Pi để dừng; profile được dọn sau đó.
-- Máy không có GUI: chọn **`email`** thay cho `sso`, nhập email → code email → code authenticator nếu có.
-- Browser SSO là flow local, không phù hợp RPC/headless; dùng email flow ở các môi trường đó.
-- Session hết hạn/bị thu hồi: `/login perplexity` lại. Không tự đổi session lỗi thành anonymous hoặc API billing nếu không có auth khác được cấu hình.
+- Requires an installed Chrome or Chromium. Common install paths on macOS, Linux and Windows are detected automatically.
+- For a different path, set `PI_WEB_SEARCH_BROWSER_PATH=/path/to/chrome` (or `PUPPETEER_EXECUTABLE_PATH`).
+- Login uses a temporary, isolated profile. It does not touch your normal browser profile, the Keychain, or the Perplexity desktop app.
+- Sandbox and TLS checks stay enabled. No browser is downloaded automatically.
+- Login times out after 5 minutes. Close the window or cancel in Pi to stop; the profile is cleaned up afterwards.
+- On machines without a GUI, choose **email** instead of `sso`: enter your address, then the email code, then an authenticator code if your account has one.
+- Browser SSO needs a local graphical session, so use the email flow for RPC and headless setups.
+- If the session expires or is revoked, run `/login perplexity` again. The extension won't quietly switch to anonymous search or API billing unless other auth is configured.
 
-Perplexity consumer endpoints là API nội bộ của dịch vụ, có thể đổi hoặc bị chặn. SSO/OTP đã có test mocked; chưa xác nhận bằng một tài khoản thật trong phiên phát triển này.
+The Perplexity consumer endpoints are internal service APIs and may change or be blocked. The SSO and OTP flows are covered by mocked tests but have not been checked with a real account.
 
-### API-key Perplexity
+### Perplexity API key
 
 ```bash
 export PERPLEXITY_API_KEY='...'
 ```
 
-Đây là API tính phí riêng, **không phải** gói Pro/Enterprise. Thứ tự auth: `PERPLEXITY_COOKIES` → Pi session → direct API key → OpenRouter (chỉ explicit selection). Nếu không có auth và chọn Perplexity explicit, thử anonymous consumer search.
+This is Perplexity's separately billed API, **not** the Pro/Enterprise subscription. Auth order: `PERPLEXITY_COOKIES` → Pi session → direct API key → OpenRouter (only when Perplexity is selected explicitly). If Perplexity is selected explicitly and no auth is configured, anonymous consumer search is tried.
 
-Model subscription mặc định `experimental`, đổi bằng `PI_PERPLEXITY_MODEL`. API mặc định `sonar-pro`, đổi bằng `PI_PERPLEXITY_API_MODEL`. Khi truyền `model` trực tiếp cho tool, giá trị được dùng cho đường auth đang chạy; tránh dùng ID của API cho subscription.
+The subscription model defaults to `experimental` (`PI_PERPLEXITY_MODEL`). The API model defaults to `sonar-pro` (`PI_PERPLEXITY_API_MODEL`). A `model` passed to the tool applies to whichever auth path runs, so don't pass an API model ID when using the subscription.
 
-## Các provider
+## Providers
 
-| Provider | Auth / cấu hình | Transport |
+| Provider | Auth / config | Transport |
 |---|---|---|
-| `parallel` | `PARALLEL_API_KEY`, `/login parallel`, hoặc keyless | REST / public MCP |
+| `parallel` | `PARALLEL_API_KEY`, `/login parallel`, or keyless | REST / public MCP |
 | `perplexity` | `/login perplexity`, `PERPLEXITY_API_KEY`, `PERPLEXITY_COOKIES` | Consumer SSE / Sonar API |
-| `gemini` | `GEMINI_API_KEY`, `/login google`, `/login google-gemini-cli`, `/login google-antigravity` | Google grounding / Cloud Code Assist SSE |
-| `anthropic` | `/login anthropic`, `ANTHROPIC_SEARCH_API_KEY`, `ANTHROPIC_API_KEY` | Messages hosted web search |
-| `codex` | `/login openai-codex` | Codex Responses SSE; phải có web search event |
-| `xai` | `/login xai`, `XAI_API_KEY` | Responses hosted web search |
+| `gemini` | `GEMINI_API_KEY`, `/login google`, `/login google-gemini-cli`, `/login google-antigravity` | Google Search grounding / Cloud Code Assist SSE |
+| `anthropic` | `/login anthropic`, `ANTHROPIC_SEARCH_API_KEY`, `ANTHROPIC_API_KEY` | Messages API hosted web search |
+| `codex` | `/login openai-codex` | Codex Responses SSE; requires a web search event |
+| `xai` | `/login xai`, `XAI_API_KEY` | Responses API hosted web search |
 | `openrouter` | `/login openrouter`, `OPENROUTER_API_KEY` | Chat completions + web plugin |
-| `zai` | `/login zai`, `ZAI_API_KEY` | Stateful MCP initialize + tools/call |
-| `exa` | `/login exa`, `EXA_API_KEY`, hoặc keyless | REST / public MCP |
-| `tinyfish` | `/login tinyfish`, `TINYFISH_API_KEY` | Search API + pagination |
+| `zai` | `/login zai`, `ZAI_API_KEY` | Stateful MCP (initialize + tools/call) |
+| `exa` | `/login exa`, `EXA_API_KEY`, or keyless | REST / public MCP |
+| `tinyfish` | `/login tinyfish`, `TINYFISH_API_KEY` | Search API with pagination |
 | `jina` | `/login jina`, `JINA_API_KEY` | Jina Search |
 | `kagi` | `/login kagi`, `KAGI_API_KEY` | Kagi V1 Search API |
 | `tavily` | `/login tavily`, `TAVILY_API_KEY` | Search API |
-| `firecrawl` | `/login firecrawl`, `FIRECRAWL_API_KEY`, hoặc keyless | V2 search |
+| `firecrawl` | `/login firecrawl`, `FIRECRAWL_API_KEY`, or keyless | V2 search |
 | `brave` | `/login brave`, `BRAVE_API_KEY` | Search API |
-| `kimi` | `/login kimi-coding`, `KIMI_SEARCH_API_KEY`, `MOONSHOT_SEARCH_API_KEY`, `KIMI_API_KEY` | Kimi Code search, **không dùng MOONSHOT_API_KEY** |
+| `kimi` | `/login kimi-coding`, `KIMI_SEARCH_API_KEY`, `MOONSHOT_SEARCH_API_KEY`, `KIMI_API_KEY` | Kimi Code search; **`MOONSHOT_API_KEY` is not accepted** |
 | `synthetic` | `/login synthetic`, `SYNTHETIC_API_KEY` | Search API |
-| `ollama` | `/login ollama-cloud`, `OLLAMA_CLOUD_API_KEY` | Hosted search, không phải Ollama local |
+| `ollama` | `/login ollama-cloud`, `OLLAMA_CLOUD_API_KEY` | Hosted search, not local Ollama |
 | `searxng` | `SEARXNG_ENDPOINT` | Self-hosted JSON search |
-| `startpage` | Không key | Homepage token + HTML search |
-| `duckduckgo` | Không key | HTML search + pagination |
-| `ecosia` | Không key | HTML; fallback Chrome |
-| `google` | Không key | HTML; fallback Chrome |
-| `mojeek` | Không key | HTML; fallback Chrome |
-| `public` | Không key, **explicit-only** | Fan-out 5 HTML engines, dedup + consensus ranking |
+| `startpage` | None | Homepage token + HTML search |
+| `duckduckgo` | None | HTML search with pagination |
+| `ecosia` | None | HTML; Chrome fallback |
+| `google` | None | HTML; Chrome fallback |
+| `mojeek` | None | HTML; Chrome fallback |
+| `public` | None, **explicit only** | Fans out to 5 HTML engines, deduplicates and ranks by consensus |
 
-Model-backed APIs có thể tiêu API credits/subscription quota. Pi sở hữu lưu trữ và refresh OAuth; extension không mở auth store riêng. Các biến search-key ưu tiên hơn auth Pi. Token usage được trả về Pi; **chi phí dollar để 0/không ước tính**, vì phí search không chỉ phụ thuộc token.
+Model-backed providers can use API credits or subscription quota. Pi owns OAuth storage and refresh; the extension never opens its own auth store. Search-specific key variables take priority over Pi auth. Token usage is reported to Pi, but **dollar cost is left at 0** because search billing isn't purely token-based.
 
 ### Google OAuth
 
@@ -112,34 +117,34 @@ Model-backed APIs có thể tiêu API credits/subscription quota. Pi sở hữu 
 /login google-antigravity
 ```
 
-Mở URL Google, OAuth PKCE + callback state validation, discover/provision Cloud Code Assist project. Một số tài khoản cần `GOOGLE_CLOUD_PROJECT` hoặc `GOOGLE_CLOUD_PROJECT_ID`.
+Opens a Google sign-in URL using OAuth with PKCE and callback state validation, then discovers or provisions a Cloud Code Assist project. Some accounts need `GOOGLE_CLOUD_PROJECT` or `GOOGLE_CLOUD_PROJECT_ID`.
 
-Máy remote: khởi động với `PI_WEB_SEARCH_OAUTH_MANUAL=1` để paste callback URL đầy đủ. Callback ports: Gemini CLI 8085, Antigravity 51121. OAuth app IDs/public-client configuration được port từ OMP; Google có thể thay đổi quyền truy cập/điều khoản. Không đảm bảo mọi loại tài khoản được cấp quyền.
+On a remote machine, start Pi with `PI_WEB_SEARCH_OAUTH_MANUAL=1` and paste the full callback URL when asked. Callback ports: 8085 for Gemini CLI, 51121 for Antigravity. The OAuth client configuration is taken from OMP and belongs to Google's Gemini CLI and Antigravity public installed-app clients; Google can change or revoke access at any time. Not every account type is guaranteed to be granted access.
 
-### Search-engine cấu hình thêm
+### Extra engine settings
 
-- Firecrawl self-hosted: `FIRECRAWL_BASE_URL` hoặc `FIRECRAWL_API_URL` (endpoint V2).
-- Kimi endpoint: `KIMI_SEARCH_BASE_URL` hoặc `MOONSHOT_SEARCH_BASE_URL`.
-- SearXNG: `SEARXNG_ENDPOINT`, `SEARXNG_TOKEN`, hoặc `SEARXNG_BASIC_USERNAME` + `SEARXNG_BASIC_PASSWORD` (Basic ưu tiên); `SEARXNG_CATEGORIES`, `SEARXNG_LANGUAGE`, `SEARXNG_ENGINES`, `SEARXNG_SAFESEARCH`. Instance phải bật JSON format. Engine shortcuts được resolve qua `/config`.
-- Exa pacing: `PI_WEB_SEARCH_EXA_DELAY_MS`, mặc định 1000 ms, `0` tắt.
-- HTML browser fallback: mặc định bật nếu cần; `PI_WEB_SEARCH_BROWSER=0` tắt. Không tác động browser login chủ động. Không có stealth patches của OMP; challenge có thể vẫn thất bại.
+- Self-hosted Firecrawl: `FIRECRAWL_BASE_URL` or `FIRECRAWL_API_URL` (V2 endpoint).
+- Kimi endpoint: `KIMI_SEARCH_BASE_URL` or `MOONSHOT_SEARCH_BASE_URL`.
+- SearXNG: `SEARXNG_ENDPOINT`; auth via `SEARXNG_TOKEN` or `SEARXNG_BASIC_USERNAME` + `SEARXNG_BASIC_PASSWORD` (Basic wins if both are set); optional `SEARXNG_CATEGORIES`, `SEARXNG_LANGUAGE`, `SEARXNG_ENGINES`, `SEARXNG_SAFESEARCH`. The instance must have JSON output enabled. Engine shortcuts are resolved through `/config`.
+- Exa pacing: `PI_WEB_SEARCH_EXA_DELAY_MS`, default 1000 ms; `0` disables it.
+- HTML browser fallback: on by default when needed; `PI_WEB_SEARCH_BROWSER=0` turns it off (the Perplexity browser login is unaffected). OMP's stealth patches are not included, so bot challenges can still fail.
 
-## Provider chain / model configuration
+## Provider chain and models
 
-Mặc định `auto`: thử các provider đã cấu hình theo thứ tự bảng trên (bỏ qua HTML/public), rồi Parallel → Exa → Startpage → DuckDuckGo → Ecosia → Google → Mojeek. Không gọi lại provider đã thất bại. Public aggregate chỉ chạy khi chọn rõ.
+In `auto` mode, configured providers are tried in table order (skipping HTML engines and Public Web), then Parallel → Exa → Startpage → DuckDuckGo → Ecosia → Google → Mojeek. A provider that already failed isn't retried, and Public Web only runs when selected explicitly.
 
 ```bash
-# Pin một provider, không fallback:
+# Pin one provider, no fallback:
 pi -e ./src/extension.ts --web-search-provider perplexity
 
-# Chain tuần tự:
+# Sequential chain:
 PI_WEB_SEARCH_PROVIDER=perplexity,exa,duckduckgo pi -e ./src/extension.ts
 
-# Timeout từng provider: default 60s, cap 300s:
+# Per-provider timeout (default 60s, max 300s):
 PI_WEB_SEARCH_TIMEOUT=90 pi -e ./src/extension.ts
 ```
 
-Config persistent tại `~/.pi/agent/web-search.json` (hoặc `$PI_CODING_AGENT_DIR/web-search.json`):
+Persistent config lives in `~/.pi/agent/web-search.json` (or `$PI_CODING_AGENT_DIR/web-search.json`):
 
 ```json
 {
@@ -155,22 +160,27 @@ Config persistent tại `~/.pi/agent/web-search.json` (hoặc `$PI_CODING_AGENT_
 }
 ```
 
-Project override `.pi/web-search.json` chỉ được đọc **khi project đã trusted**. `models` merge, arrays replace. Config đọc lại mỗi lần gọi; không cần reload. CLI flag → env chain → config → auto. Timeout env ưu tiên config. `providers: []` hoặc exclude hết chain vô hiệu hóa search. `exclude` vẫn có hiệu lực khi model pin provider.
+A project `.pi/web-search.json` is read **only after the project is trusted**. `models` entries are merged; arrays replace. Config is re-read on every call, so no reload is needed.
 
-Model ID: tool `model` → config `models` → `PI_WEB_SEARCH_<PROVIDER>_MODEL` → mặc định. Với Gemini có thể dùng `google/...`, `google-gemini-cli/...`, `google-antigravity/...` để chọn auth path; không prefix thì thử auth có sẵn. Đây không phải fuzzy model-role resolution của OMP.
+- Chain precedence: CLI flag → env chain → config → auto.
+- The timeout env var takes precedence over config.
+- `providers: []`, or excluding the whole chain, disables search.
+- `exclude` still applies when the model pins a provider.
 
-## Giao diện TUI
+Model ID precedence: tool `model` → config `models` → `PI_WEB_SEARCH_<PROVIDER>_MODEL` → default. For Gemini, a `google/...`, `google-gemini-cli/...` or `google-antigravity/...` prefix selects the auth path; without a prefix, the available auth paths are tried. This is exact matching, not OMP's fuzzy model-role resolution.
 
-`web_search` có renderer riêng trong Pi TUI:
+## TUI
 
-- Dòng gọi: `◎ Web Search “query”` kèm chip provider/recency/số kết quả/model.
-- Đang chạy: `⋯ Searching the web…`.
-- Thu gọn: provider · model · số nguồn · thời gian · auth, provider fallback bị bỏ qua (`↷`), ghi chú lọc, 2 dòng answer, top 3 nguồn kèm domain.
-- Mở rộng (`ctrl+o`, theo keybinding `app.tools.expand`): answer đầy đủ, toàn bộ nguồn với URL/ngày/snippet, citations, related, queries.
-- Lỗi: `✗ Search failed` với từng provider trên một dòng.
-- Tiêu đề/URL là OSC 8 hyperlink khi terminal hỗ trợ; màu theo theme Pi; mọi dòng giới hạn theo độ rộng terminal (có tính ký tự rộng/emoji); ký tự điều khiển từ web bị loại bỏ.
+`web_search` has its own renderer in the Pi TUI:
 
-Xem trước không cần Pi: `npx tsx scripts/preview.ts 100` (`PI_THEME=light` để đổi theme).
+- Call line: `◎ Web Search “query”` with chips for provider, recency, result count and model.
+- While running: `⋯ Searching the web…`.
+- Collapsed: provider · model · source count · duration · auth; skipped fallback providers (`↷`); filter notes; 2 lines of the answer; top 3 sources with domains.
+- Expanded (`ctrl+o`, or whatever `app.tools.expand` is bound to): full answer, all sources with URL, date and snippet, citations, related questions and queries.
+- Errors: `✗ Search failed`, one line per provider.
+- Titles and URLs are clickable (OSC 8) in terminals that support it. Colors follow the Pi theme, every line fits the terminal width (wide characters and emoji included), and control characters from web content are stripped.
+
+Preview without Pi: `npx tsx scripts/preview.ts 100` (`PI_THEME=light` for the light theme).
 
 ## Tool schema
 
@@ -184,32 +194,36 @@ Xem trước không cần Pi: `npx tsx scripts/preview.ts 100` (`PI_THEME=light`
 }
 ```
 
-- `query`: 1–10.000 ký tự, không chỉ whitespace.
-- `provider`: `auto` hoặc một ID trong bảng; ID cụ thể thay toàn chain.
-- `limit`: mặc định 10, 1–40; backend có thể trả ít hơn.
-- `num_search_results`: OMP-compatible breadth/count, ưu tiên `limit`.
-- `recency`: `day|week|month|year`; backend không hỗ trợ sẽ bỏ qua.
-- `model`: ID cho model-backed search.
-- `max_tokens`: 1–32768; chỉ model-backed transports hỗ trợ, Codex bỏ qua.
-- `temperature`: 0–1; backend hỗ trợ mới gửi; Anthropic/Codex bỏ qua.
+- `query`: 1–10,000 characters, not whitespace only.
+- `provider`: `auto` or an ID from the table. A specific ID replaces the whole chain.
+- `limit`: default 10, range 1–40; backends may return fewer.
+- `num_search_results`: OMP-compatible result count; takes precedence over `limit`.
+- `recency`: `day`, `week`, `month` or `year`; ignored by backends that don't support it.
+- `model`: model ID for model-backed search.
+- `max_tokens`: 1–32,768; only model-backed providers use it (Codex ignores it).
+- `temperature`: 0–1; sent only where supported (Anthropic and Codex ignore it).
 
-Parser OMP hỗ trợ `site:`, `-site:`, date bounds, `inurl:`, `intitle:`, `filetype:`, quoted phrases, exclusions, `OR`, language directives. Native mapping theo provider + lenient post-filter: điều kiện loại hết nguồn được nới với `Note:`. **Đây không phải strict/security filtering**; answer/citations không bị viết lại khi lọc sources.
+The OMP parser supports `site:`, `-site:`, date bounds, `inurl:`, `intitle:`, `filetype:`, quoted phrases, exclusions, `OR` and language directives. Constraints are mapped to each provider's native filters, then applied as a lenient post-filter: if a constraint would remove every source, it is relaxed and reported in a `Note:`. **This is not strict or security filtering**, and the answer and citations are not rewritten when sources are filtered.
 
-Text có provider, answer nếu có, nguồn + snippet tối đa 240 ký tự. `details` chứa response, notes, failures, model/usage, fullOutputPath nếu truncated. Quá 2.000 dòng/50 KiB: lưu toàn văn tại temp file mode 0600, cho agent đọc lại; file được giữ tới khi bạn dọn temp.
+The text output includes the provider, the answer if any, and sources with snippets of up to 240 characters. `details` holds the response, notes, failures, model and usage, and `fullOutputPath` when truncated. Output over 2,000 lines or 50 KiB is saved in full to a temp file (mode 0600) that the agent can read; the file stays until you clear your temp directory.
 
-Lỗi/empty/timeout → fallback. Cancel → dừng, không fallback. Hết chain → throw để Pi đánh dấu tool failed. Byte cap response 2 MiB. Public aggregate soft deadline 5s/hard 30s. Không fetch tự động các URL nguồn.
+- Errors, empty results and timeouts move on to the next provider in the chain.
+- Cancellation stops immediately without falling back.
+- When the whole chain fails, the tool throws so Pi marks it as failed.
+- Responses are capped at 2 MiB; Public Web has a 5 s soft and 30 s hard deadline.
+- Source URLs are never fetched automatically.
 
-## Riêng tư và an toàn
+## Privacy and safety
 
-- Query gửi tới từng dịch vụ được thử; Public Web gửi tới 5 engines. Pin provider nếu không muốn chia sẻ query cho fallback.
-- Không gửi transcript, file hay Pi session ID/model metadata tới public MCP.
-- API credentials chỉ gửi tới endpoint của backend (hoặc endpoint self-hosted do bạn cấu hình). OAuth refresh do Pi quản lý.
-- Browser login chỉ bắt session cookie của cửa sổ tạm được mở chủ động; không mượn desktop app session.
-- Tất cả output web là dữ liệu không đáng tin, không phải chỉ dẫn. Chỉ giữ source URLs HTTP(S).
-- Không tự login, cài extension, sửa settings hoặc mở browser lúc load. Browser chỉ chạy trong login/search khi cần.
-- Extension có full permissions như mọi Pi extension; chỉ cài source bạn tin tưởng.
+- Your query is sent to every service the chain tries, and Public Web sends it to 5 engines. Pin a provider if you don't want it shared with fallbacks.
+- Transcripts, files, Pi session IDs and model metadata are never sent to public MCP services.
+- API credentials are only sent to their own backend (or a self-hosted endpoint you configure). Pi manages OAuth refresh.
+- Browser login only reads the session cookie from the temporary window it opened; it never borrows desktop app sessions.
+- All web output is treated as untrusted data, not instructions. Only HTTP(S) source URLs are kept.
+- Loading the extension doesn't log in, install anything, change settings or open a browser. The browser runs only for login or when an HTML search needs it.
+- Like every Pi extension, this one runs with full permissions. Only install sources you trust.
 
-## Phát triển / kiểm tra
+## Development
 
 ```bash
 npm ci --ignore-scripts
@@ -219,8 +233,10 @@ npm run test:live -- parallel 'Pi coding agent documentation'
 npm pack --dry-run
 ```
 
-Tests mặc định không dùng mạng: query, native filters, envelopes, OAuth callback/refresh/session segregation, Perplexity OTP/TOTP, SSE, browser-independent HTML fixtures, public ranking, config trust, timeout/cancel, truncation.
+The default tests need no network. They cover query parsing, native filters, response envelopes, OAuth callbacks and refresh, session segregation, Perplexity OTP/TOTP, SSE, HTML fixtures (no browser), Public Web ranking, config trust, timeouts and cancellation, truncation, and TUI rendering.
 
-Live đã kiểm tra Parallel/Exa/DDG keyless, Pi loader/runtime với auth store tạm và Chrome lifecycle. Chưa kiểm tra login subscription bằng tài khoản thật hay toàn bộ paid APIs. Xem [PORTING.md](PORTING.md) trước khi coi bản port tương đương OMP.
+Checked live: keyless Parallel, Exa and DuckDuckGo; the Pi loader and runtime with a temporary auth store; the Chrome lifecycle. Not yet checked live: subscription logins with real accounts and the paid APIs. Read [PORTING.md](PORTING.md) before treating this as equivalent to OMP.
 
-Upstream pin: `b1a8b875cf81ec2fdc3cc397a2d4b6a9a777543d`. MIT, xem [NOTICE](NOTICE) / [LICENSE](LICENSE).
+## Credits
+
+Based on the web search in [oh-my-pi](https://github.com/can1357/oh-my-pi) by Can Bölük (upstream revision `b1a8b875cf81ec2fdc3cc397a2d4b6a9a777543d`). MIT licensed; see [NOTICE](NOTICE) and [LICENSE](LICENSE).
