@@ -22,6 +22,9 @@ npm ci --ignore-scripts
 pi -e ./src/extension.ts
 
 # Hoặc cài package local:
+pi install git:github.com/genson2k/pi-web-search@v0.2.0
+
+# Hoặc từ bản clone local:
 pi install /absolute/path/to/pi-web-search
 ```
 
